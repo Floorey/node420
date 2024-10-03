@@ -38,6 +38,6 @@ func ConnectToSever(address string) {
 	}
 }
 func main() {
-	serverAddress := "localhost: 8080"
+	serverAddress := "192.168.3.140:8080"
 	ConnectToSever(serverAddress)
 }

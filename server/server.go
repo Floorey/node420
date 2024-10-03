@@ -5,7 +5,26 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 )
+
+var clients = make(map[net.Conn]bool)
+var mu sync.Mutex
+
+func broadcastMessage(message string, sender net.Conn) {
+	mu.Lock()
+	defer mu.Unlock()
+	for client := range clients {
+		if client != sender {
+			_, err := client.Write([]byte(message))
+			if err != nil {
+				log.Println("Error sending message to client:", err)
+				client.Close()
+				delete(clients, client)
+			}
+		}
+	}
+}
 
 func StartServer(port string) {
 	listerner, err := net.Listen("tcp", ":"+port)
@@ -23,11 +42,22 @@ func StartServer(port string) {
 			log.Println("Failed to accept connection: ", err)
 			continue
 		}
+
+		mu.Lock()
+		clients[conn] = true
+		mu.Unlock()
+
+		fmt.Println("New client connected:", conn.RemoteAddr())
 		go handleConnection(conn)
 	}
 }
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		mu.Lock()
+		delete(clients, conn)
+		mu.Unlock()
+		conn.Close()
+	}()
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -36,13 +66,9 @@ func handleConnection(conn net.Conn) {
 			log.Println("Error reading message:", err)
 			return
 		}
-		fmt.Print("Received message :", message)
+		fmt.Println("Received message:", message)
 
-		_, err = conn.Write([]byte("Message received\n"))
-		if err != nil {
-			log.Println("Error sending response:", err)
-
-		}
+		broadcastMessage(message, conn)
 	}
 }
 func main() {
